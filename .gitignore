@@ -1,4 +1,5 @@
 .vscode
+traces
 .gdb_history
 *.o
 mdriver
