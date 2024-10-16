@@ -32,8 +32,8 @@
 #define PUT(p, val) (*(size_t *)(p) = (val))
 
 /* Read the size and allocated fields from address p */
-#define GET_SIZE(p) ((size_t)(GET(p) & ~0x7))
-#define GET_ALLOC(p) ((size_t)(GET(p) & 0x1))
+#define GET_SIZE(p) (GET(p) & ~0x7)
+#define GET_ALLOC(p) (GET(p) & 0x1)
 
 /* Given block ptr pb, compute address of its header and footer */
 #define HDRP(bp) ((void *)(bp) - WSIZE)
@@ -43,7 +43,19 @@
 #define NEXT_BLKP(bp) ((void *)(bp) + GET_SIZE(((void *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((void *)(bp) - GET_SIZE(((void *)(bp) - DSIZE)))
 
+/* Given block ptr bp, compute address of next and previous blocks in segrated lists */
+#define NEXT_PTR(bp) (*((void **)(bp) + WSIZE))
+#define PREV_PTR(bp) (*(void **)(bp))
+
+// #define PUT_PTR(p, ptr) (*(size_t *)(p) = (size_t)(ptr))
+
+#define CLASS_SIZE 13
+
+// https://github.com/hehozo/Malloc-lab/blob/master/mm.c
+// https://github.com/lsw8075/malloc-lab/blob/master/src/mm.c
+
 static void *heap_listp;
+static void *free_lists[CLASS_SIZE];
 
 static void *coalesce(void *bp)
 {
@@ -98,14 +110,15 @@ static void *extend_heap(size_t words)
 }
 
 static void *find_fit(size_t asize) {
-    /* First-fit search */
-    void *bp;
+    size_t level = 0;
+    for (size_t size = asize - 1; size > 0; size >>= 1, level++);
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-            return bp;
-        }
-    }
+    for (size_t i = MAX(level - 4, 0); i < CLASS_SIZE; i++)
+        if (free_lists[i] != NULL)
+            for (void *bp = free_lists[i]; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_PTR(bp))
+                if (GET_SIZE(HDRP(bp)) >= asize)
+                    return bp;
+
     return NULL;
 }
 
