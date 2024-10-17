@@ -20,7 +20,7 @@
 
 #define WSIZE 4 /* Word and header/footer size (bytes) */
 #define DSIZE 8 /* Double word size (bytes) */
-#define CHUNCKSIZE (1<<12)
+#define CHUNCKSIZE (1 << 12)
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 
@@ -63,24 +63,28 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
-    if (prev_alloc && next_alloc) {
+    if (prev_alloc && next_alloc)
+    {
         return bp;
     }
 
-    else if (prev_alloc && !next_alloc) {
+    else if (prev_alloc && !next_alloc)
+    {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
     }
 
-    else if (!prev_alloc && next_alloc) {
+    else if (!prev_alloc && next_alloc)
+    {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
 
-    else {
+    else
+    {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
@@ -101,17 +105,19 @@ static void *extend_heap(size_t words)
         return NULL;
 
     /* Initialize free block header/footer and the epilogue header */
-    PUT(HDRP(bp), PACK(size, 0)); /* Free block header */
-    PUT(FTRP(bp), PACK(size, 0)); /* Free block footer */
+    PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
+    PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
 }
 
-static void *find_fit(size_t asize) {
+static void *find_fit(size_t asize)
+{
     size_t level = 0;
-    for (size_t size = asize - 1; size > 0; size >>= 1, level++);
+    for (size_t size = asize - 1; size > 0; size >>= 1, level++)
+        ;
 
     for (size_t i = MAX(level - 4, 0); i < CLASS_SIZE; i++)
         if (free_lists[i] != NULL)
@@ -122,17 +128,20 @@ static void *find_fit(size_t asize) {
     return NULL;
 }
 
-static void place(void *bp, size_t asize) {
+static void place(void *bp, size_t asize)
+{
     size_t csize = GET_SIZE(HDRP(bp));
 
-    if ((csize - asize) >= (2 * DSIZE)) {
+    if ((csize - asize) >= (2 * DSIZE))
+    {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
     }
-    else {
+    else
+    {
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
     }
@@ -143,6 +152,9 @@ static void place(void *bp, size_t asize) {
  */
 int mm_init(void)
 {
+    for (size_t i = 0; i < CLASS_SIZE; i++)
+        free_lists[i] = NULL;
+
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1)
         return -1;
@@ -164,7 +176,7 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    size_t asize; /* Adjusted block size */
+    size_t asize;      /* Adjusted block size */
     size_t extendsize; /* Amount to extend heap if no fit */
     void *bp;
 
@@ -179,7 +191,8 @@ void *mm_malloc(size_t size)
         asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
 
     /* Search the free list for a fit */
-    if ((bp = find_fit(asize)) != NULL) {
+    if ((bp = find_fit(asize)) != NULL)
+    {
         place(bp, asize);
         return bp;
     }
