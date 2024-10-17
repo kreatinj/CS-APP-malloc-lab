@@ -44,12 +44,12 @@
 #define PREV_BLKP(bp) ((void *)(bp) - GET_SIZE(((void *)(bp) - DSIZE)))
 
 /* Given block ptr bp, compute address of next and previous blocks in segrated lists */
-#define NEXT_PTR(bp) (*((void **)(bp) + WSIZE))
-#define PREV_PTR(bp) (*(void **)(bp))
+#define NEXT_PTR(bp) (*(void **)(bp))
+#define PREV_PTR(bp) (*((void **)(bp) + WSIZE))
 
 // #define PUT_PTR(p, ptr) (*(size_t *)(p) = (size_t)(ptr))
 
-#define CLASS_SIZE 13
+#define CLASS_SIZE 20
 
 // https://github.com/hehozo/Malloc-lab/blob/master/mm.c
 // https://github.com/lsw8075/malloc-lab/blob/master/src/mm.c
@@ -115,15 +115,22 @@ static void *extend_heap(size_t words)
 
 static void *find_fit(size_t asize)
 {
-    size_t level = 0;
-    for (size_t size = asize - 1; size > 0; size >>= 1, level++)
-        ;
+    for (size_t i = 0, size = asize - 1; i < CLASS_SIZE; i++, size >>= 1)
+    {
+        if (i < CLASS_SIZE - 1 && size > 1)
+            continue;
 
-    for (size_t i = MAX(level - 4, 0); i < CLASS_SIZE; i++)
-        if (free_lists[i] != NULL)
-            for (void *bp = free_lists[i]; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_PTR(bp))
-                if (GET_SIZE(HDRP(bp)) >= asize)
-                    return bp;
+        void *tmp = NULL;
+        for (void *bp = free_lists[i]; bp != NULL; bp = NEXT_PTR(bp)) {
+            size_t free_size = GET_SIZE(HDRP(bp));
+            if (free_size == asize)
+                return bp;
+            else if (free_size > asize)
+                tmp = bp;
+        }
+        if (tmp != NULL)
+            return tmp;
+    }
 
     return NULL;
 }
