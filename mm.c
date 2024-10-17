@@ -163,13 +163,20 @@ static void place(void *bp, size_t asize)
 
 static void push_block(void *bp)
 {
-    size_t size = GET_SIZE(HDRP(bp));
-    for (size_t i = 0; i < CLASS_SIZE; i++, size >>= 1);
+    size_t index = 0;
+    for (size_t size = GET_SIZE(HDRP(bp)) - 1; size > 0 && index < CLASS_SIZE; index++, size >>= 1);
+
+    // LIFO strategy
+    // PUT_PTR(PREV_PTR(bp)) = free_list[index];
+    // PUT_PTR(NEXT_PTR(bp)) = NEXT_PTR(free_list[index]);
+    // PUT_PTR(NEXT_PTR(free_list[index])) = bp;
+
 }
 
 static void pop_block(void *bp)
 {
-
+    // PUT_PTR(NEXT_PTR(PREV_PTR(bp))) = NEXT_PTR(bp);
+    // PUT_PTR(PREV_PTR(NEXT_PTR(bp))) = PREV_PTR(bp);
 }
 
 /*
