@@ -55,7 +55,14 @@
 // https://github.com/lsw8075/malloc-lab/blob/master/src/mm.c
 
 static void *heap_listp;
-static void *free_lists[CLASS_SIZE];
+static void *free_list[CLASS_SIZE];
+static void *coalesce(void*);
+static void *extend_heap(size_t);
+static void *find_fit(size_t);
+static void place(void*, size_t);
+static void push_block(void*);
+static void pop_block(void*);
+
 
 static void *coalesce(void *bp)
 {
@@ -121,7 +128,7 @@ static void *find_fit(size_t asize)
             continue;
 
         void *tmp = NULL;
-        for (void *bp = free_lists[i]; bp != NULL; bp = NEXT_PTR(bp)) {
+        for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp)) {
             size_t free_size = GET_SIZE(HDRP(bp));
             if (free_size == asize)
                 return bp;
@@ -154,13 +161,24 @@ static void place(void *bp, size_t asize)
     }
 }
 
+static void push_block(void *bp)
+{
+    size_t size = GET_SIZE(HDRP(bp));
+    for (size_t i = 0; i < CLASS_SIZE; i++, size >>= 1);
+}
+
+static void pop_block(void *bp)
+{
+
+}
+
 /*
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
     for (size_t i = 0; i < CLASS_SIZE; i++)
-        free_lists[i] = NULL;
+        free_list[i] = NULL;
 
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1)
