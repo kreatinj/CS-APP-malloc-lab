@@ -68,10 +68,6 @@ static void place(void *, size_t);
 static void push_block(void *);
 static void pop_block(void *);
 
-static void blk_info(void *);
-static void print_free_list(void);
-static void print_heap();
-
 static void *coalesce(void *bp)
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
@@ -206,45 +202,6 @@ static void pop_block(void *bp)
         PUT(PREV(NEXT_PTR(bp)), prev);
     PUT(PREV(bp), 0);
     PUT(NEXT(bp), 0);
-}
-
-static void blk_info(void *bp)
-{
-    printf("addr: %#010x\n", bp);
-    printf("rel: %u\n", bp - heap_listp);
-    printf("hdr: %#010x / size: %u / inuse: %u\n", HDRP(bp), GET_SIZE(HDRP(bp)), GET_ALLOC(HDRP(bp)));
-    printf("ftr: %#010x / size: %u / inuse: %u\n", FTRP(bp), GET_SIZE(FTRP(bp)), GET_ALLOC(FTRP(bp)));
-    printf("next: %#010x\n", GET(NEXT(bp)));
-    printf("prev: %#010x\n", GET(PREV(bp)));
-    printf("\n");
-}
-
-static void print_free_list()
-{
-    for (size_t i = 0; i < CLASS_SIZE; i++)
-    {
-        if (free_list[i])
-            printf("%u\n", i);
-        for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp))
-            blk_info(bp);
-    }
-}
-
-static void print_heap()
-{
-    for (void *bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
-        blk_info(bp);
-}
-
-void test(void)
-{
-    mem_init();
-    mm_init();
-    printf("heap size: %u\n", mem_heapsize());
-    printf("lo: %#010x\n", mem_heap_lo());
-    printf("\n");
-
-    printf("heap size: %u\n", mem_heapsize());
 }
 
 /*

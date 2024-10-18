@@ -165,7 +165,7 @@ int main(int argc, char **argv)
 	/*
 	 * Read and interpret the command line arguments
 	 */
-	while ((c = getopt(argc, argv, "f:t:hvVglT")) != EOF)
+	while ((c = getopt(argc, argv, "f:t:hvVgl")) != EOF)
 	{
 		switch (c)
 		{
@@ -198,9 +198,6 @@ int main(int argc, char **argv)
 			break;
 		case 'h': /* Print this message */
 			usage();
-			exit(0);
-		case 'T':
-			test();
 			exit(0);
 		default:
 			usage();
