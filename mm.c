@@ -2,13 +2,13 @@
  * mm-seglist.c
  *
  * header와 footer에는 implicit list와 동일하게 block 크기와 할당 여부를 저장합니다.
- * free block의 경우 previous and next free block를 data로 갖습니다.
- * free_list는 segrated list로, 인덱스 n에 대해 2^n에서 2^(n+1) - 1 크기의 free block을 doubly linked list로 구현했습니다.
- * 또한, 8byte allign이기 때문에 인덱스 0-2은 사용하지 않습니다.
- * malloc 할 때, heap 끝의 block이 free block인지 판단하여 추가로 필요한 공간만 추가합니다.
- * realloc은 3가지 경우로 나눕니다.
+ * free block의 경우 previous and next free block를 data로 갖으며 block 크기에 따라 doubly linked list를 구성합니다.
+ * free_list는 segrated list로, 각 인덱스 n에는 2^n에서 2^(n+1) - 1 크기의 free block을 갖습니다.
+ * 또한, 8-byte align이기 때문에 인덱스 0-2은 사용하지 않습니다.
+ * malloc 할 때, heap 끝(마지막) block이 free block인지 판단하여 추가로 필요한 공간만 확장합니다.
+ * realloc의 동작은 3가지 경우로 나눕니다.
  * 1. 크기가 줄어드는 경우, header와 footer만 수정하여 재할당 없이 크기를 수정합니다.
- * 2. 크기가 늘어나지만, 해당 블록이 heap의 끝에서 처음 등장하는 할당 블록인 경우, 필요한 공간을 확장한 후, 재할당 없이 크기를 수정합니다.
+ * 2. 크기가 늘어나지만, 해당 블록 이후로 free block만 있거나 아무 block이 없는 경우, 필요한 공간을 확장한 후, 재할당 없이 크기를 수정합니다.
  * 3. 그 외는 메모리를 새로 할당하고, 데이터를 옮긴 후, 기존 메모리를 해제합니다.
  */
 #include <stdio.h>
