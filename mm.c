@@ -61,12 +61,16 @@
 static void *heap_listp;
 static void *free_list[CLASS_SIZE];
 
-static void *coalesce(void*);
+static void *coalesce(void *);
 static void *extend_heap(size_t);
 static void *find_fit(size_t);
-static void place(void*, size_t);
-static void push_block(void*);
-static void pop_block(void*);
+static void place(void *, size_t);
+static void push_block(void *);
+static void pop_block(void *);
+
+static void blk_info(void *);
+static void print_free_list(void);
+static void print_heap();
 
 static void *coalesce(void *bp)
 {
@@ -74,11 +78,11 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
-    if (prev_alloc && next_alloc)
-        return bp;
-
     // pop_block(bp);
-    if (prev_alloc && !next_alloc)
+
+    if (prev_alloc && next_alloc)
+        ;
+    else if (prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
@@ -86,17 +90,16 @@ static void *coalesce(void *bp)
         PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
     }
-
     else if (!prev_alloc && next_alloc)
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(bp), 0);
         bp = PREV_BLKP(bp);
-        PUT(FTRP(bp),0);
+        PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
+        // pop_block(bp);
     }
-
     else
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
@@ -105,21 +108,19 @@ static void *coalesce(void *bp)
         PUT(FTRP(bp), 0);
         PUT(HDRP(bp), 0);
         bp = PREV_BLKP(bp);
-        PUT(FTRP(bp),0);
+        PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
+        // pop_block(bp);
     }
-    // push_block(bp);
+    push_block(bp);
 
     return bp;
 }
 
-static void *extend_heap(size_t words)
+static void *extend_heap(size_t size)
 {
     void *bp;
-    size_t size;
 
-    /* Allocate an even number of words to maintain alignment */
-    size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
     if ((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
 
@@ -128,11 +129,13 @@ static void *extend_heap(size_t words)
     PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 
+    // push_block(bp);
+
     /* Coalesce if the previous block was free */
     return coalesce(bp);
 }
 
-static void *find_fit2(size_t asize)
+static void *find_fit(size_t asize)
 {
     for (size_t i = 0, size = asize - 1; i < CLASS_SIZE; i++, size >>= 1)
     {
@@ -140,7 +143,8 @@ static void *find_fit2(size_t asize)
             continue;
 
         void *tmp = NULL;
-        for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp)) {
+        for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp))
+        {
             size_t free_size = GET_SIZE(HDRP(bp));
             if (free_size == asize)
                 return bp;
@@ -150,25 +154,13 @@ static void *find_fit2(size_t asize)
         if (tmp != NULL)
             return tmp;
     }
-
-    return NULL;
-}
-
-static void *find_fit(size_t asize) {
-    /* First-fit search */
-    void *bp;
-
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
-            return bp;
-        }
-    }
     return NULL;
 }
 
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));
+    pop_block(bp);
 
     if ((csize - asize) >= (2 * DSIZE))
     {
@@ -177,6 +169,7 @@ static void place(void *bp, size_t asize)
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
+        push_block(bp);
     }
     else
     {
@@ -188,7 +181,8 @@ static void place(void *bp, size_t asize)
 static void push_block(void *bp)
 {
     size_t index = 0;
-    for (size_t size = GET_SIZE(HDRP(bp)) - 1; size > 0 && index < CLASS_SIZE - 1; index++, size >>= 1);
+    for (size_t size = GET_SIZE(HDRP(bp)) - 1; size > 0 && index < CLASS_SIZE - 1; index++, size >>= 1)
+        ;
 
     // LIFO strategy
     PUT(PREV(bp), &free_list[index]);
@@ -213,6 +207,7 @@ static void pop_block(void *bp)
 static void blk_info(void *bp)
 {
     printf("addr: %#010x\n", bp);
+    printf("rel: %u\n", bp - heap_listp);
     printf("hdr: %#010x / size: %u / inuse: %u\n", HDRP(bp), GET_SIZE(HDRP(bp)), GET_ALLOC(HDRP(bp)));
     printf("ftr: %#010x / size: %u / inuse: %u\n", FTRP(bp), GET_SIZE(FTRP(bp)), GET_ALLOC(FTRP(bp)));
     printf("next: %#010x\n", GET(NEXT(bp)));
@@ -220,50 +215,47 @@ static void blk_info(void *bp)
     printf("\n");
 }
 
-static void print_free_list() {
+static void print_free_list()
+{
     for (size_t i = 0; i < CLASS_SIZE; i++)
+    {
+        if (free_list[i])
+            printf("%u\n", i);
         for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp))
             blk_info(bp);
+    }
 }
 
-void test(void) {
+static void print_heap()
+{
+    for (void *bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+        blk_info(bp);
+}
+
+void test(void)
+{
     mem_init();
     mm_init();
     printf("heap size: %u\n", mem_heapsize());
     printf("lo: %#010x\n", mem_heap_lo());
     printf("\n");
 
-    void *p1 = mm_malloc(12);
-    void *p2 = mm_malloc(12);
-    void *p3 = mm_malloc(12);
-    void *p4 = mm_malloc(12);
-    void *p5 = mm_malloc(12);
-    void *p6 = mm_malloc(12);
-    void *p7 = mm_malloc(12);
-    mm_free(p2);
-    mm_free(p4);
-    mm_free(p6);
-
-    push_block(p2);
-    push_block(p4);
-    push_block(p6);
-
-    pop_block(p4);
-
-    void *fit = find_fit2(24);
-    if (fit != NULL)
-        blk_info(fit);
-    else
-        printf("NULL\n");
+    printf("1\n");
+    void *p1 = mm_malloc(2040);
+    printf("2\n");
+    void *p2 = mm_malloc(4010);
 
     print_free_list();
-    pop_block(p6);
-    fit = find_fit2(24);
-    if (fit != NULL)
-        blk_info(fit);
-    else
-        printf("NULL\n");
-    print_free_list();
+
+    // printf("heap size: %u\n", mem_heapsize());
+    // print_heap();
+    // void *p3 = mm_malloc(48);
+    // void *p4 = mm_malloc(4072);
+    // void *p5 = mm_malloc(4072);
+    // void *p6 = mm_malloc(4072);
+
+    // print_heap();
+    // print_free_list();
 }
 
 /*
@@ -284,7 +276,7 @@ int mm_init(void)
     heap_listp += (2 * WSIZE);
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNCKSIZE / WSIZE) == NULL)
+    if (extend_heap(CHUNCKSIZE) == NULL)
         return -1;
     return 0;
 }
@@ -295,8 +287,6 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    size_t asize;      /* Adjusted block size */
-    size_t extendsize; /* Amount to extend heap if no fit */
     void *bp;
 
     /* Ignore spurious requests */
@@ -304,10 +294,7 @@ void *mm_malloc(size_t size)
         return NULL;
 
     /* Adjust block size to include overhead and alignment reqs. */
-    if (size <= DSIZE)
-        asize = 2 * DSIZE;
-    else
-        asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
+    size_t asize = DSIZE * ((size + (2 * DSIZE) - 1) / DSIZE);
 
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL)
@@ -317,8 +304,8 @@ void *mm_malloc(size_t size)
     }
 
     /* No fit found. Get more memory and place the block */
-    extendsize = MAX(asize, CHUNCKSIZE);
-    if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
+    size_t extendsize = MAX(asize, CHUNCKSIZE);
+    if ((bp = extend_heap(extendsize)) == NULL)
         return NULL;
     place(bp, asize);
 
