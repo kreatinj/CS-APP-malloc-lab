@@ -59,6 +59,7 @@
 // https://github.com/lsw8075/malloc-lab/blob/master/src/mm.c
 
 static void *heap_listp;
+static void *heap_end_ptr;
 static void *free_list[CLASS_SIZE];
 
 static void *coalesce(void *);
@@ -128,6 +129,7 @@ static void *extend_heap(size_t size)
     PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
     PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
+    heap_end_ptr = NEXT_BLKP(bp);
 
     push_block(bp);
 
@@ -219,7 +221,8 @@ int mm_init(void)
     PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1));
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));
-    heap_listp += (2 * WSIZE);
+    heap_listp += 2 * WSIZE;
+    heap_end_ptr = NEXT_BLKP(heap_listp);
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNCKSIZE) == NULL)
@@ -250,7 +253,10 @@ void *mm_malloc(size_t size)
     }
 
     /* No fit found. Get more memory and place the block */
-    size_t extendsize = MAX(asize, CHUNCKSIZE);
+    size_t last_block_size = GET_SIZE(FTRP(heap_end_ptr));
+    size_t last_block_alloc = 1 - GET_ALLOC(FTRP(heap_end_ptr));
+    size_t extendsize = asize - last_block_alloc * last_block_size + DSIZE;
+
     if ((bp = extend_heap(extendsize)) == NULL)
         return NULL;
     place(bp, asize);
