@@ -23,6 +23,7 @@
 #define CHUNCKSIZE (1 << 12)
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
+#define ASIZE(size) ((((size) + (DSIZE - 1)) & ~0x7) + DSIZE)
 
 /* Pack a size and allocated bit intoa word */
 #define PACK(size, alloc) ((size) | (alloc))
@@ -74,8 +75,11 @@ static void *coalesce(void *bp)
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
+    size_t alloc = GET_ALLOC(HDRP(bp));
 
-    if (prev_alloc && next_alloc)
+    if (alloc)
+        return NULL;
+    else if (prev_alloc && next_alloc)
         return bp;
     else if (prev_alloc && !next_alloc)
     {
@@ -196,6 +200,8 @@ static void push_block(void *bp)
 
 static void pop_block(void *bp)
 {
+    if (GET_ALLOC(HDRP(bp)))
+        return;
     void *prev = GET(PREV(bp));
     void *next = GET(NEXT(bp));
     if (prev != NULL)
@@ -243,7 +249,7 @@ void *mm_malloc(size_t size)
         return NULL;
 
     /* Adjust block size to include overhead and alignment reqs. */
-    size_t asize = DSIZE * ((size + (2 * DSIZE) - 1) / DSIZE);
+    size_t asize = ASIZE(size);
 
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL)
@@ -285,15 +291,51 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *newptr;
     size_t old_size = GET_SIZE(HDRP(ptr)) - DSIZE;
+    size_t asize = ASIZE(size);
     size_t copy_size = size > old_size ? old_size : size;
 
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
+    if (ptr == NULL)
+        return mm_malloc(size);
+    if (size == 0)
+    {
+        mm_free(ptr);
         return NULL;
+    }
 
-    memcpy(newptr, ptr, copy_size);
-    mm_free(ptr);
-    return newptr;
+    void *free = find_fit(size);
+    void *next = NEXT_BLKP(ptr);
+    void *nnext = NEXT_BLKP(next);
+    size_t last = GET_SIZE(HDRP(next)) == 0 || (GET_ALLOC(HDRP(next)) == 0 && GET_SIZE(HDRP(nnext)) == 0);
+
+    if (old_size >= size)
+    {
+        place(ptr, old_size);
+        if (!GET_ALLOC(NEXT_BLKP(ptr)))
+            coalesce(NEXT_BLKP(ptr));
+        return ptr;
+    }
+    else if (size > old_size && free == NULL && last)
+    {
+        void *bp;
+        size_t extendsize = asize - old_size - GET_SIZE(HDRP(next)) + DSIZE;
+        if ((bp = extend_heap(extendsize)) == NULL)
+            return NULL;
+        pop_block(next);
+        PUT(HDRP(ptr), PACK(asize, 1));
+        PUT(FTRP(ptr), PACK(asize, 1));
+        place(bp, asize);
+
+        return ptr;
+    }
+    else
+    {
+        void *newptr = mm_malloc(size);
+        if (newptr == NULL)
+            return NULL;
+
+        memcpy(newptr, ptr, copy_size);
+        mm_free(ptr);
+        return newptr;
+    }
 }
