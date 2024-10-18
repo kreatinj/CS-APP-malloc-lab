@@ -78,12 +78,12 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
 
-    // pop_block(bp);
-
     if (prev_alloc && next_alloc)
-        ;
+        return bp;
     else if (prev_alloc && !next_alloc)
     {
+        pop_block(bp);
+        pop_block(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         PUT(HDRP(NEXT_BLKP(bp)), 0);
@@ -92,16 +92,20 @@ static void *coalesce(void *bp)
     }
     else if (!prev_alloc && next_alloc)
     {
+        pop_block(bp);
+        pop_block(PREV_BLKP(bp));
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(bp), 0);
         bp = PREV_BLKP(bp);
         PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
-        // pop_block(bp);
     }
     else
     {
+        pop_block(bp);
+        pop_block(PREV_BLKP(bp));
+        pop_block(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         PUT(HDRP(NEXT_BLKP(bp)), 0);
@@ -110,7 +114,7 @@ static void *coalesce(void *bp)
         bp = PREV_BLKP(bp);
         PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
-        // pop_block(bp);
+        pop_block(bp);
     }
     push_block(bp);
 
@@ -129,7 +133,7 @@ static void *extend_heap(size_t size)
     PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 
-    // push_block(bp);
+    push_block(bp);
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
@@ -240,22 +244,7 @@ void test(void)
     printf("lo: %#010x\n", mem_heap_lo());
     printf("\n");
 
-    printf("1\n");
-    void *p1 = mm_malloc(2040);
-    printf("2\n");
-    void *p2 = mm_malloc(4010);
-
-    print_free_list();
-
-    // printf("heap size: %u\n", mem_heapsize());
-    // print_heap();
-    // void *p3 = mm_malloc(48);
-    // void *p4 = mm_malloc(4072);
-    // void *p5 = mm_malloc(4072);
-    // void *p6 = mm_malloc(4072);
-
-    // print_heap();
-    // print_free_list();
+    printf("heap size: %u\n", mem_heapsize());
 }
 
 /*
@@ -324,6 +313,7 @@ void mm_free(void *ptr)
 
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
+    push_block(ptr);
     coalesce(ptr);
 }
 
