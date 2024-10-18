@@ -293,9 +293,9 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    size_t old_size = GET_SIZE(HDRP(ptr)) - DSIZE;
+    size_t old_size = GET_SIZE(HDRP(ptr));
     size_t asize = ASIZE(size);
-    size_t copy_size = size > old_size ? old_size : size;
+    size_t copy_size = size > old_size - DSIZE ? old_size - DSIZE : size;
 
     if (ptr == NULL)
         return mm_malloc(size);
@@ -305,24 +305,24 @@ void *mm_realloc(void *ptr, size_t size)
         return NULL;
     }
 
-    void *free = find_fit(size);
-    void *next = NEXT_BLKP(ptr);
-    void *nnext = NEXT_BLKP(next);
-    size_t last = GET_SIZE(HDRP(next)) == 0 || (GET_ALLOC(HDRP(next)) == 0 && GET_SIZE(HDRP(nnext)) == 0);
+    void *next_ptr = NEXT_BLKP(ptr);
+    size_t last = GET_SIZE(HDRP(next_ptr)) == 0 ||
+                  (GET_ALLOC(HDRP(next_ptr)) == 0 && GET_SIZE(HDRP(NEXT_BLKP(next_ptr))) == 0);
+    size_t free = find_fit(asize) == NULL;
 
-    if (old_size >= size)
+    if (old_size >= asize)
     {
-        place(ptr, old_size);
+        place(ptr, asize);
         coalesce(NEXT_BLKP(ptr));
         return ptr;
     }
-    else if (size > old_size && free == NULL && last)
+    else if (free && last)
     {
-        void *bp;
-        size_t extendsize = asize - GET_SIZE(HDRP(ptr)) - GET_SIZE(HDRP(next)) + DSIZE;
-        if ((bp = extend_heap(extendsize)) == NULL)
+        size_t extendsize = asize + DSIZE - GET_SIZE(HDRP(ptr)) - GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+        if (extend_heap(extendsize) == NULL)
             return NULL;
-        pop_block(next);
+        pop_block(NEXT_BLKP(ptr));
+
         size_t total_size = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr)));
         PUT(HDRP(ptr), PACK(total_size, 1));
         PUT(FTRP(ptr), PACK(total_size, 1));
