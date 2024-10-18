@@ -29,7 +29,7 @@
 
 /* Read and write a word at address p */
 #define GET(p) (*(size_t *)(p))
-#define PUT(p, val) (*(size_t *)(p) = (val))
+#define PUT(p, val) (*(size_t *)(p) = (size_t)(val))
 
 /* Read the size and allocated fields from address p */
 #define GET_SIZE(p) (GET(p) & ~0x7)
@@ -43,9 +43,13 @@
 #define NEXT_BLKP(bp) ((void *)(bp) + GET_SIZE(((void *)(bp) - WSIZE)))
 #define PREV_BLKP(bp) ((void *)(bp) - GET_SIZE(((void *)(bp) - DSIZE)))
 
+/* Given block ptr pb, compute address of its next and previous address */
+#define NEXT(bp) ((void *)(bp))
+#define PREV(bp) ((void *)(bp) + WSIZE)
+
 /* Given block ptr bp, compute address of next and previous blocks in segrated lists */
-#define NEXT_PTR(bp) (*(void **)(bp))
-#define PREV_PTR(bp) (*((void **)(bp) + WSIZE))
+#define NEXT_PTR(bp) (*(void **)NEXT(bp))
+#define PREV_PTR(bp) (*(void **)PREV(bp))
 
 // #define PUT_PTR(p, ptr) (*(size_t *)(p) = (size_t)(ptr))
 
@@ -56,13 +60,13 @@
 
 static void *heap_listp;
 static void *free_list[CLASS_SIZE];
+
 static void *coalesce(void*);
 static void *extend_heap(size_t);
 static void *find_fit(size_t);
 static void place(void*, size_t);
 static void push_block(void*);
 static void pop_block(void*);
-
 
 static void *coalesce(void *bp)
 {
@@ -71,32 +75,40 @@ static void *coalesce(void *bp)
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc)
-    {
         return bp;
-    }
 
-    else if (prev_alloc && !next_alloc)
+    // pop_block(bp);
+    if (prev_alloc && !next_alloc)
     {
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+        PUT(HDRP(NEXT_BLKP(bp)), 0);
+        PUT(FTRP(bp), 0);
         PUT(HDRP(bp), PACK(size, 0));
-        PUT(FTRP(bp), PACK(size, 0));
     }
 
     else if (!prev_alloc && next_alloc)
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        PUT(HDRP(bp), 0);
         bp = PREV_BLKP(bp);
+        PUT(FTRP(bp),0);
+        PUT(HDRP(bp), PACK(size, 0));
     }
 
     else
     {
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+        PUT(HDRP(NEXT_BLKP(bp)), 0);
+        PUT(FTRP(bp), 0);
+        PUT(HDRP(bp), 0);
         bp = PREV_BLKP(bp);
+        PUT(FTRP(bp),0);
+        PUT(HDRP(bp), PACK(size, 0));
     }
+    // push_block(bp);
 
     return bp;
 }
@@ -120,7 +132,7 @@ static void *extend_heap(size_t words)
     return coalesce(bp);
 }
 
-static void *find_fit(size_t asize)
+static void *find_fit2(size_t asize)
 {
     for (size_t i = 0, size = asize - 1; i < CLASS_SIZE; i++, size >>= 1)
     {
@@ -139,6 +151,18 @@ static void *find_fit(size_t asize)
             return tmp;
     }
 
+    return NULL;
+}
+
+static void *find_fit(size_t asize) {
+    /* First-fit search */
+    void *bp;
+
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            return bp;
+        }
+    }
     return NULL;
 }
 
@@ -164,19 +188,82 @@ static void place(void *bp, size_t asize)
 static void push_block(void *bp)
 {
     size_t index = 0;
-    for (size_t size = GET_SIZE(HDRP(bp)) - 1; size > 0 && index < CLASS_SIZE; index++, size >>= 1);
+    for (size_t size = GET_SIZE(HDRP(bp)) - 1; size > 0 && index < CLASS_SIZE - 1; index++, size >>= 1);
 
     // LIFO strategy
-    // PUT_PTR(PREV_PTR(bp)) = free_list[index];
-    // PUT_PTR(NEXT_PTR(bp)) = NEXT_PTR(free_list[index]);
-    // PUT_PTR(NEXT_PTR(free_list[index])) = bp;
-
+    PUT(PREV(bp), &free_list[index]);
+    PUT(NEXT(bp), free_list[index]);
+    if (free_list[index])
+        PUT(PREV(free_list[index]), bp);
+    free_list[index] = bp;
 }
 
 static void pop_block(void *bp)
 {
-    // PUT_PTR(NEXT_PTR(PREV_PTR(bp))) = NEXT_PTR(bp);
-    // PUT_PTR(PREV_PTR(NEXT_PTR(bp))) = PREV_PTR(bp);
+    void *prev = GET(PREV(bp));
+    void *next = GET(NEXT(bp));
+    if (prev != NULL)
+        PUT(NEXT(PREV_PTR(bp)), next);
+    if (next != NULL)
+        PUT(PREV(NEXT_PTR(bp)), prev);
+    PUT(PREV(bp), 0);
+    PUT(NEXT(bp), 0);
+}
+
+static void blk_info(void *bp)
+{
+    printf("addr: %#010x\n", bp);
+    printf("hdr: %#010x / size: %u / inuse: %u\n", HDRP(bp), GET_SIZE(HDRP(bp)), GET_ALLOC(HDRP(bp)));
+    printf("ftr: %#010x / size: %u / inuse: %u\n", FTRP(bp), GET_SIZE(FTRP(bp)), GET_ALLOC(FTRP(bp)));
+    printf("next: %#010x\n", GET(NEXT(bp)));
+    printf("prev: %#010x\n", GET(PREV(bp)));
+    printf("\n");
+}
+
+static void print_free_list() {
+    for (size_t i = 0; i < CLASS_SIZE; i++)
+        for (void *bp = free_list[i]; bp != NULL; bp = NEXT_PTR(bp))
+            blk_info(bp);
+}
+
+void test(void) {
+    mem_init();
+    mm_init();
+    printf("heap size: %u\n", mem_heapsize());
+    printf("lo: %#010x\n", mem_heap_lo());
+    printf("\n");
+
+    void *p1 = mm_malloc(12);
+    void *p2 = mm_malloc(12);
+    void *p3 = mm_malloc(12);
+    void *p4 = mm_malloc(12);
+    void *p5 = mm_malloc(12);
+    void *p6 = mm_malloc(12);
+    void *p7 = mm_malloc(12);
+    mm_free(p2);
+    mm_free(p4);
+    mm_free(p6);
+
+    push_block(p2);
+    push_block(p4);
+    push_block(p6);
+
+    pop_block(p4);
+
+    void *fit = find_fit2(24);
+    if (fit != NULL)
+        blk_info(fit);
+    else
+        printf("NULL\n");
+
+    print_free_list();
+    pop_block(p6);
+    fit = find_fit2(24);
+    if (fit != NULL)
+        blk_info(fit);
+    else
+        printf("NULL\n");
+    print_free_list();
 }
 
 /*
