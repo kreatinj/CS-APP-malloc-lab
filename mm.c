@@ -259,9 +259,9 @@ void *mm_malloc(size_t size)
     }
 
     /* No fit found. Get more memory and place the block */
-    size_t last_block_size = GET_SIZE(FTRP(heap_end_ptr));
+    size_t last_block_size = GET_SIZE(FTRP(heap_end_ptr)) - DSIZE;
     size_t last_block_alloc = 1 - GET_ALLOC(FTRP(heap_end_ptr));
-    size_t extendsize = asize - last_block_alloc * last_block_size + DSIZE;
+    size_t extendsize = asize - last_block_alloc * last_block_size;
 
     if ((bp = extend_heap(extendsize)) == NULL)
         return NULL;
@@ -311,20 +311,20 @@ void *mm_realloc(void *ptr, size_t size)
     if (old_size >= size)
     {
         place(ptr, old_size);
-        if (!GET_ALLOC(NEXT_BLKP(ptr)))
-            coalesce(NEXT_BLKP(ptr));
+        coalesce(NEXT_BLKP(ptr));
         return ptr;
     }
     else if (size > old_size && free == NULL && last)
     {
         void *bp;
-        size_t extendsize = asize - old_size - GET_SIZE(HDRP(next)) + DSIZE;
+        size_t extendsize = asize - GET_SIZE(HDRP(ptr)) - GET_SIZE(HDRP(next)) + DSIZE;
         if ((bp = extend_heap(extendsize)) == NULL)
             return NULL;
         pop_block(next);
-        PUT(HDRP(ptr), PACK(asize, 1));
-        PUT(FTRP(ptr), PACK(asize, 1));
-        place(bp, asize);
+        size_t total_size = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+        PUT(HDRP(ptr), PACK(total_size, 1));
+        PUT(FTRP(ptr), PACK(total_size, 1));
+        place(ptr, asize);
 
         return ptr;
     }
