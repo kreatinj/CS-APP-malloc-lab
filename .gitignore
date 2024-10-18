@@ -1,5 +1,6 @@
 .vscode
 traces
 .gdb_history
+assign-2-submit.tar.gz
 *.o
 mdriver
