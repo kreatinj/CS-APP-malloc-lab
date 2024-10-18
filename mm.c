@@ -325,6 +325,7 @@ void *mm_realloc(void *ptr, size_t size)
         PUT(HDRP(ptr), PACK(total_size, 1));
         PUT(FTRP(ptr), PACK(total_size, 1));
         place(ptr, asize);
+        coalesce(NEXT_BLKP(ptr));
 
         return ptr;
     }
